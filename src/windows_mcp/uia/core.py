@@ -14,18 +14,15 @@ This means that the code can be freely copied and distributed, and costs nothing
 import os
 import sys
 import time
-import datetime
 import shlex
 import struct
-import atexit
 import threading
 import ctypes
 import ctypes.wintypes
 import comtypes
 import comtypes.client
 from _ctypes import COMError
-from io import TextIOWrapper
-from typing import Any, Callable, Dict, Generator, List, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Tuple
 
 
 METRO_WINDOW_CLASS_NAME = "Windows.UI.Core.CoreWindow"  # for Windows 8 and 8.1
@@ -45,8 +42,8 @@ ProcessTime = time.perf_counter  # this returns nearly 0 when first call it if p
 ProcessTime()  # need to call it once if python version <= 3.6
 TreeNode = Any
 from .enums import *  # noqa: E402
-from .enums import _INPUTUnion
-from .exceptions import from_com_error, UIAException  # noqa: E402
+from .enums import _INPUTUnion  # noqa: E402
+from .exceptions import from_com_error  # noqa: E402
 
 
 class _AutomationClient:
