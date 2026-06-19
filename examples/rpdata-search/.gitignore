@@ -1,0 +1,5 @@
+node_modules/
+.env
+.auth/
+output.csv
+input.csv
