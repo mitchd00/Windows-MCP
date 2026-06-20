@@ -1,73 +1,97 @@
-// Central configuration for the RP Data → LockedOn automation.
+// Central configuration for the LockedOn ⇄ RP Data prospecting pipeline.
 //
-// IMPORTANT: The RP Data selectors below are PLACEHOLDERS. RP Data (CoreLogic
-// RPP) is behind a login, so the exact DOM could not be inspected when this
-// scaffold was generated. Capture the real selectors once with:
+// PIPELINE
+//   LockedOn: find LISTED properties
+//     → for each, read its Enquiries + Inspections (contact names)
+//       → search each name in RP Data → properties they currently own
+//         → if any owned property is on the Sunshine Coast,
+//            write a private note on that enquiry/inspection in LockedOn.
 //
-//     npm run codegen
-//
-// then paste them in where marked TODO. Everything else works as-is.
+// IMPORTANT: every CSS selector below is a PLACEHOLDER. Both LockedOn and RP
+// Data sit behind logins, so their real DOM couldn't be inspected up front.
+// Capture the real ones once with:
+//     npm run codegen:lockedon
+//     npm run codegen:rpdata
+// and paste them into the matching TODO slots.
 
 import "dotenv/config";
 
 export const config = {
-  // ---- RP Data (CoreLogic) ----
-  rpData: {
-    // Login + search start page. Adjust if your RP Data entry point differs.
-    baseUrl: process.env.RPDATA_BASE_URL || "https://rpp.corelogic.com.au/",
+  // A single Playwright browser context logs into BOTH sites, so one saved
+  // session file covers them both.
+  storageStatePath: "./.auth/session.json",
+  headless: process.env.HEADLESS !== "false",
+  delayBetweenActionsMs: Number(process.env.ACTION_DELAY_MS || 1500),
 
-    // Credentials are read from the environment (.env), never hardcoded.
-    username: process.env.RPDATA_USERNAME,
-    password: process.env.RPDATA_PASSWORD,
+  lockedOn: {
+    baseUrl: process.env.LOCKEDON_BASE_URL || "https://app.lockedon.com/",
+    username: process.env.LOCKEDON_USERNAME,
+    password: process.env.LOCKEDON_PASSWORD,
 
-    // Where Playwright stores the logged-in session after `npm run login`,
-    // so the search run does not need to log in every time.
-    storageStatePath: "./.auth/rpdata.json",
-
-    // TODO: capture these with `npm run codegen`.
     selectors: {
-      usernameInput: 'input[name="username"]',      // TODO verify
-      passwordInput: 'input[name="password"]',      // TODO verify
-      loginButton: 'button[type="submit"]',         // TODO verify
-      // A selector that only exists once you are logged in (used to confirm login):
-      loggedInMarker: 'text=Search',                // TODO verify
+      // --- login ---
+      usernameInput: 'input[name="email"]',          // TODO verify
+      passwordInput: 'input[name="password"]',        // TODO verify
+      loginButton: 'button[type="submit"]',           // TODO verify
+      loggedInMarker: 'text=Dashboard',               // TODO verify
 
-      // Search box + how a result row is shown:
-      searchInput: 'input[type="search"]',          // TODO verify
-      searchSubmit: 'button[aria-label="Search"]',  // TODO verify
-      firstResult: '.search-result:first-child',    // TODO verify
+      // --- finding listed properties ---
+      // A page/filter that lists current LISTED properties, and the rows on it.
+      listedPropertiesUrl: "/properties?status=listed", // TODO verify
+      propertyRow: '[data-test="property-row"]',         // TODO verify
+      propertyAddress: '[data-test="property-address"]', // TODO verify
 
-      // Detail fields to scrape from a result. Add/rename to match RP Data.
-      // Keys become spreadsheet columns.
-      detailFields: {
-        ownerName: '[data-field="owner-name"]',     // TODO verify
-        propertyAddress: '[data-field="address"]',  // TODO verify
-        contactPhone: '[data-field="phone"]',       // TODO verify
-        lastSalePrice: '[data-field="last-sale"]',  // TODO verify
-      },
+      // --- a property's enquiries & inspections ---
+      enquiriesTab: 'role=tab[name="Enquiries"]',     // TODO verify
+      inspectionsTab: 'role=tab[name="Inspections"]', // TODO verify
+      contactRow: '[data-test="contact-row"]',        // TODO verify
+      contactName: '[data-test="contact-name"]',      // TODO verify
+
+      // --- private notes on an enquiry/inspection ---
+      privateNotesInput: 'textarea[name="private_notes"]', // TODO verify
+      saveNotesButton: 'button:has-text("Save")',          // TODO verify
     },
   },
 
-  // ---- Input / output spreadsheets ----
-  io: {
-    // Each row must have at least a "name" column (the name to search).
-    inputCsv: process.env.INPUT_CSV || "./input.csv",
-    outputCsv: process.env.OUTPUT_CSV || "./output.csv",
+  rpData: {
+    baseUrl: process.env.RPDATA_BASE_URL || "https://rpp.corelogic.com.au/",
+    username: process.env.RPDATA_USERNAME,
+    password: process.env.RPDATA_PASSWORD,
+
+    selectors: {
+      usernameInput: 'input[name="username"]',  // TODO verify
+      passwordInput: 'input[name="password"]',  // TODO verify
+      loginButton: 'button[type="submit"]',     // TODO verify
+      loggedInMarker: 'text=Search',            // TODO verify
+
+      // Search a person's name, open them, list properties they own.
+      searchInput: 'input[type="search"]',          // TODO verify
+      searchSubmit: 'button[aria-label="Search"]',  // TODO verify
+      personResult: '.search-result:first-child',   // TODO verify
+      ownedPropertyRow: '[data-field="owned-property"]', // TODO verify
+      ownedPropertyAddress: '[data-field="address"]',    // TODO verify
+    },
   },
 
-  // ---- LockedOn CRM (optional, Route A) ----
-  // Leave webhookUrl empty to skip pushing to LockedOn (results still go to the
-  // output spreadsheet). To enable: in Zapier, create a "Catch Hook" trigger
-  // wired to the LockedOn "Create Inspection" or "Create Enquiry" action, then
-  // paste the hook URL here / in .env.
-  lockedOn: {
-    enabled: Boolean(process.env.LOCKEDON_WEBHOOK_URL),
-    webhookUrl: process.env.LOCKEDON_WEBHOOK_URL || "",
-    // "inspection" or "enquiry" — informational; your Zap decides the action.
-    recordType: process.env.LOCKEDON_RECORD_TYPE || "inspection",
+  // What counts as "Sunshine Coast". A property matches if its address contains
+  // one of these postcodes OR one of these suburb keywords (case-insensitive).
+  sunshineCoast: {
+    // Sunshine Coast + Noosa LGAs, roughly postcodes 4550–4575 (plus a few).
+    postcodes: [
+      "4550", "4551", "4552", "4553", "4554", "4555", "4556", "4557", "4558",
+      "4559", "4560", "4561", "4562", "4563", "4564", "4565", "4566", "4567",
+      "4568", "4569", "4570", "4571", "4572", "4573", "4574", "4575",
+    ],
+    suburbKeywords: [
+      "Sunshine Coast", "Caloundra", "Maroochydore", "Mooloolaba", "Noosa",
+      "Buderim", "Nambour", "Coolum", "Peregian", "Maleny", "Kawana",
+      "Sippy Downs", "Mountain Creek", "Twin Waters", "Marcoola",
+    ],
   },
 
-  // Pace requests politely; RP Data is a licensed service, not a scraping target.
-  delayBetweenSearchesMs: Number(process.env.SEARCH_DELAY_MS || 2000),
-  headless: process.env.HEADLESS !== "false",
+  // A run report is written here for your records.
+  reportCsv: process.env.REPORT_CSV || "./report.csv",
+  // Safety switch: when false, the script logs what it WOULD write to LockedOn
+  // notes but does not actually save. Flip to true once selectors are verified.
+  writeNotes: process.env.WRITE_NOTES === "true",
 };

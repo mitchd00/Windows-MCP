@@ -1,21 +1,24 @@
-# RP Data → LockedOn automation
+# LockedOn ⇄ RP Data prospector
 
-Reads a list of names from a spreadsheet, searches each one on **RP Data**
-(CoreLogic RPP), scrapes the detail fields, writes them to an output
-spreadsheet, and **optionally** creates an **Inspection** or **Enquiry** in
-**LockedOn** CRM for each result.
+Finds people in your **LockedOn** pipeline who are **potential sellers**: for
+each **listed** property, it reads the enquiry/inspection contacts, looks each
+one up in **RP Data**, and if they currently own a **Sunshine Coast** property,
+writes a private note on that enquiry/inspection.
 
 ```
-input.csv (names) ──▶ Playwright searches RP Data ──▶ output.csv
-                                                  └──▶ LockedOn (optional)
+LockedOn: listed properties
+   └─ each property's Enquiries + Inspections (contact names)
+        └─ search name in RP Data → properties they own
+             └─ if Sunshine Coast → private note on that enquiry/inspection
 ```
 
-## Why it runs locally (not in the cloud)
+## Why it's all browser automation
 
-RP Data is behind your CoreLogic login and tied to your subscription/licence,
-so the browser step must run **on your machine**, where you can sign in. This
-folder is a self-contained Node + Playwright project for exactly that. Your
-credentials stay in a local `.env` and are never committed.
+The available LockedOn API actions are **create-only** — they can't read your
+listed properties/enquiries or update private notes. So this drives the
+**LockedOn web UI** with Playwright (read + write notes) alongside the **RP Data
+web UI** (owner lookup). Both run locally where you're logged in; credentials
+stay in a local `.env`.
 
 ## Setup
 
@@ -23,21 +26,20 @@ credentials stay in a local `.env` and are never committed.
 cd examples/rpdata-search
 npm install
 npx playwright install chromium
-cp .env.example .env        # then fill in RPDATA_USERNAME / RPDATA_PASSWORD
-cp input.example.csv input.csv
+cp .env.example .env        # fill in LockedOn + RP Data logins
 ```
 
-## 1. Capture the real RP Data selectors (one-time)
+## 1. Capture the real selectors (one-time)
 
-The selectors in `config.js` are **placeholders** — RP Data's login wall meant
-the real DOM couldn't be inspected up front. Capture them once:
+Every selector in `config.js` is a **placeholder** — both sites are behind
+logins, so the real DOM couldn't be inspected up front. Capture them once:
 
 ```bash
-npm run codegen
+npm run codegen:lockedon    # login → listed properties → a property's enquiries/inspections → private notes box
+npm run codegen:rpdata      # login → name search → a person → their owned properties
 ```
 
-Click through login → search → a result. Playwright prints the selectors it
-generates; paste them into the matching `TODO` fields in `config.js`.
+Paste each generated selector into the matching `TODO` slot in `config.js`.
 
 ## 2. Log in once
 
@@ -45,41 +47,39 @@ generates; paste them into the matching `TODO` fields in `config.js`.
 npm run login
 ```
 
-Saves your session to `.auth/rpdata.json`. If RP Data uses MFA/SSO/captcha, set
-`HEADLESS=false` in `.env` and complete it by hand in the opened window — the
-saved session still works for later runs.
+Logs into **both** sites in one browser and saves the combined session to
+`.auth/session.json`. For MFA/SSO, set `HEADLESS=false` and finish by hand.
 
-## 3. Run the pipeline
+## 3. Run — dry-run first
 
 ```bash
-npm run search
+npm run start
 ```
 
-Searches every `name` row in `input.csv`, writes `output.csv`.
+With `WRITE_NOTES=false` (default) it does the full pipeline and writes
+`report.csv`, but only **logs** the notes it *would* save — nothing is written
+to LockedOn. Review `report.csv`, then set `WRITE_NOTES=true` to actually save
+the private notes.
 
-## LockedOn integration (optional)
+## Tuning "Sunshine Coast"
 
-Two ways to get results into LockedOn:
+`config.js → sunshineCoast` lists the postcodes (4550–4575) and suburb keywords
+that count as a match. Add/trim to fit your patch.
 
-**Route A — automated (this script).** In Zapier, create a **Catch Hook**
-trigger → **LockedOn: Create Inspection** (or **Create Enquiry**) action. Map
-the JSON fields this script sends (`name`, `property_address`, `mobile_phone`,
-`comments`, `record_type`). Put the hook URL in `LOCKEDON_WEBHOOK_URL`. Done —
-every searched record is pushed automatically.
+## Files
 
-**Route B — assisted.** Leave the webhook empty, run the search, and the
-results land in `output.csv`. Hand that file over and the Inspection/Enquiry
-records can be created interactively via the LockedOn tools (one call per row,
-with a chance to review each before it's created).
+| File | Role |
+|---|---|
+| `config.js` | All settings + selectors (the `TODO`s) + Sunshine Coast rules |
+| `login.js` | One-time combined login, saves the session |
+| `lockedon.js` | Listed properties, contacts, private-note writing |
+| `rpdata.js` | Name search → owned properties |
+| `sunshineCoast.js` | Address → is-Sunshine-Coast test |
+| `run.js` | Orchestrates the pipeline, writes `report.csv` |
 
-The LockedOn "Create Inspection" / "Create Enquiry" actions accept: `name`,
-`email`, `mobile_phone`, `home_phone`, `address`, `property_address`,
-`comments`, `referral_source`, and more — extend the payload in
-`search.js → pushToLockedOn()` to map additional scraped fields.
+## Safety notes
 
-## Notes
-
-- Be respectful of RP Data's terms — this paces requests (`SEARCH_DELAY_MS`)
-  and is for your own licensed, lawful lookups only.
-- `.env`, `.auth/`, `input.csv`, and `output.csv` are gitignored so no
-  credentials or personal data are committed.
+- **Dry-run by default.** Nothing is written to LockedOn until `WRITE_NOTES=true`.
+- Use only for your own licensed RP Data access and your own LockedOn office.
+- `.env`, `.auth/`, and `report.csv` are gitignored — no credentials or client
+  data are committed.

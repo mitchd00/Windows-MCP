@@ -1,49 +1,30 @@
-// One-time login: opens RP Data, signs in, and saves the session so the search
-// run can reuse it. Run with:  npm run login
+// One-time login to BOTH LockedOn and RP Data in a single browser context, then
+// save the combined session. Run with:  npm run login
 //
-// Tip: if RP Data uses SSO / MFA / a captcha, run this with HEADLESS=false and
-// complete those steps by hand in the opened browser window. The saved session
-// (storageState) captures the result either way.
+// If either site uses SSO/MFA/captcha, set HEADLESS=false in .env and complete
+// those steps by hand in the opened window — the saved session still captures
+// the result.
 
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { config } from "./config.js";
+import { loginLockedOn } from "./lockedon.js";
+import { loginRpData } from "./rpdata.js";
 
 async function main() {
-  const { rpData, headless } = config;
-
-  if (!rpData.username || !rpData.password) {
-    console.warn(
-      "No RPDATA_USERNAME / RPDATA_PASSWORD set. Launching headed so you can " +
-        "log in manually; the session will still be saved.",
-    );
-  }
-
-  const browser = await chromium.launch({ headless: headless && Boolean(rpData.username) });
+  const browser = await chromium.launch({ headless: config.headless });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto(rpData.baseUrl, { waitUntil: "domcontentloaded" });
+  console.log("Logging into LockedOn...");
+  await loginLockedOn(page);
+  console.log("Logging into RP Data...");
+  await loginRpData(page);
 
-  // Best-effort auto-fill; harmless if the fields aren't found (manual fallback).
-  try {
-    if (rpData.username) {
-      await page.fill(rpData.selectors.usernameInput, rpData.username, { timeout: 8000 });
-      await page.fill(rpData.selectors.passwordInput, rpData.password, { timeout: 8000 });
-      await page.click(rpData.selectors.loginButton, { timeout: 8000 });
-    }
-  } catch (err) {
-    console.warn("Auto-login step skipped/failed — finish logging in manually.", err.message);
-  }
-
-  // Wait until we can see a logged-in marker. Generous timeout for manual MFA.
-  console.log("Waiting for login to complete (up to 3 minutes)...");
-  await page.waitForSelector(rpData.selectors.loggedInMarker, { timeout: 180000 });
-
-  await mkdir(dirname(rpData.storageStatePath), { recursive: true });
-  await context.storageState({ path: rpData.storageStatePath });
-  console.log(`Session saved to ${rpData.storageStatePath}`);
+  await mkdir(dirname(config.storageStatePath), { recursive: true });
+  await context.storageState({ path: config.storageStatePath });
+  console.log(`Combined session saved to ${config.storageStatePath}`);
 
   await browser.close();
 }
