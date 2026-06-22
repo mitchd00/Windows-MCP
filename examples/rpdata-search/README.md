@@ -64,7 +64,8 @@ the private notes.
 ## Tuning "Sunshine Coast"
 
 `config.js → sunshineCoast` lists the postcodes (4550–4575) and suburb keywords
-that count as a match. Add/trim to fit your patch.
+that count as a match. Add/trim to fit your patch. See **[SUBURBS.md](SUBURBS.md)**
+for the full documented list (postcode → localities) and how the match is decided.
 
 ## Files
 
