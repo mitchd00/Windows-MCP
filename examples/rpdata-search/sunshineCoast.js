@@ -24,10 +24,11 @@ export function isSunshineCoast(address) {
   const tail = text.includes(",") ? text.slice(text.lastIndexOf(",") + 1) : text;
 
   // Postcode: AU postcodes sit at the END of the address, so match the trailing
-  // 4-digit group. This avoids treating a street/unit number earlier in the
-  // line as a postcode, including in comma-less addresses where the tail is the
-  // whole string (e.g. "4551 Smith St Sydney NSW 2000" -> 2000, not 4551).
-  const pc = tail.match(/(\d{4})\s*$/);
+  // 4-digit group. The \b prevents capturing the last 4 digits of a longer
+  // number (e.g. "PO Box 14550" must not match 4550) and avoids treating a
+  // street/unit number earlier in the line as a postcode, including in
+  // comma-less addresses where the tail is the whole string.
+  const pc = tail.match(/\b(\d{4})\s*$/);
   if (pc && postcodeSet.has(pc[1])) return true;
 
   // Suburb: whole-word match, but only within the tail.
