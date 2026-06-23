@@ -25,12 +25,13 @@ async function main() {
     );
   }
 
-  const browser = await chromium.launch({ headless: config.headless });
-  const context = await browser.newContext({ storageState: config.storageStatePath });
-  const page = await context.newPage();
-
   const report = [];
+  let browser;
   try {
+    browser = await chromium.launch({ headless: config.headless });
+    const context = await browser.newContext({ storageState: config.storageStatePath });
+    const page = await context.newPage();
+
     const listed = await getListedProperties(page);
     console.log(`Found ${listed.length} listed propert${listed.length === 1 ? "y" : "ies"}.`);
 
@@ -82,9 +83,15 @@ async function main() {
       }
     }
   } finally {
-    // Always persist whatever was gathered, even if the pipeline threw midway.
-    await writeFile(config.reportCsv, stringify(report, { header: true }), "utf8");
-    await browser.close();
+    // Always persist whatever was gathered and always close the browser. Guard
+    // each step so a write failure can't leak the browser or mask the original
+    // pipeline error.
+    try {
+      await writeFile(config.reportCsv, stringify(report, { header: true }), "utf8");
+    } catch (err) {
+      console.warn(`Could not write report ${config.reportCsv}: ${err.message}`);
+    }
+    if (browser) await browser.close();
   }
 
   const flagged = report.filter((r) => r.flagged).length;
