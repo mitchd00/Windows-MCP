@@ -5,36 +5,30 @@
 // All selectors live in config.js and are PLACEHOLDERS until captured with
 // `npm run codegen:lockedon`.
 import { config } from "./config.js";
+import { performLogin, isLoggedOut } from "./auth.js";
 
 const lo = config.lockedOn;
 const sel = lo.selectors;
 
-// Best-effort login. If SSO/MFA is in play, run headed and finish by hand.
-export async function loginLockedOn(page) {
-  await page.goto(lo.baseUrl, { waitUntil: "domcontentloaded" });
-  try {
-    if (lo.username) {
-      await page.fill(sel.usernameInput, lo.username, { timeout: 8000 });
-      await page.fill(sel.passwordInput, lo.password, { timeout: 8000 });
-      await page.click(sel.loginButton, { timeout: 8000 });
-    }
-  } catch (err) {
-    console.warn("LockedOn auto-login skipped — finish manually.", err.message);
-  }
-  await page.waitForSelector(sel.loggedInMarker, { timeout: 180000 });
-}
+export const loginLockedOn = (page) => performLogin(page, lo, "LockedOn");
 
 // Returns [{ address, url }] for every currently-listed property.
 export async function getListedProperties(page) {
   await page.goto(new URL(sel.listedPropertiesUrl, lo.baseUrl).toString(), {
     waitUntil: "domcontentloaded",
   });
+  // A stale saved session lands on the login page; surface that instead of
+  // silently returning zero properties.
+  if (await isLoggedOut(page, lo)) {
+    throw new Error("LockedOn session appears expired — run `npm run login` again.");
+  }
   const rows = page.locator(sel.propertyRow);
   const count = await rows.count();
   const properties = [];
   for (let i = 0; i < count; i++) {
     const row = rows.nth(i);
-    const address = (await row.locator(sel.propertyAddress).textContent())?.trim() ?? "";
+    const address =
+      (await row.locator(sel.propertyAddress).textContent().catch(() => null))?.trim() ?? "";
     const href = await row.locator("a").first().getAttribute("href").catch(() => null);
     properties.push({ address, url: href ? new URL(href, lo.baseUrl).toString() : null });
   }
@@ -57,7 +51,8 @@ export async function getContacts(page, property) {
       const count = await rows.count();
       for (let i = 0; i < count; i++) {
         const row = rows.nth(i);
-        const name = (await row.locator(sel.contactName).textContent())?.trim() ?? "";
+        const name =
+          (await row.locator(sel.contactName).textContent().catch(() => null))?.trim() ?? "";
         const href = await row.locator("a").first().getAttribute("href").catch(() => null);
         if (name) {
           contacts.push({

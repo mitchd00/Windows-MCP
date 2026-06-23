@@ -37,7 +37,8 @@ export const config = {
 
       // --- finding listed properties ---
       // A page/filter that lists current LISTED properties, and the rows on it.
-      listedPropertiesUrl: "/properties?status=listed", // TODO verify
+      // Relative (no leading slash) so it resolves against any path in baseUrl.
+      listedPropertiesUrl: "properties?status=listed", // TODO verify
       propertyRow: '[data-test="property-row"]',         // TODO verify
       propertyAddress: '[data-test="property-address"]', // TODO verify
 
@@ -76,7 +77,7 @@ export const config = {
   // What counts as "Sunshine Coast". A property matches if its address contains
   // one of these postcodes OR one of these suburb keywords (case-insensitive).
   sunshineCoast: {
-    // Sunshine Coast + Noosa LGAs, roughly postcodes 4550–4575 (plus a few).
+    // Sunshine Coast Regional + Noosa Shire LGAs: postcodes 4550–4575.
     postcodes: [
       "4550", "4551", "4552", "4553", "4554", "4555", "4556", "4557", "4558",
       "4559", "4560", "4561", "4562", "4563", "4564", "4565", "4566", "4567",

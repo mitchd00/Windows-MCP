@@ -30,49 +30,63 @@ async function main() {
   const page = await context.newPage();
 
   const report = [];
+  try {
+    const listed = await getListedProperties(page);
+    console.log(`Found ${listed.length} listed propert${listed.length === 1 ? "y" : "ies"}.`);
 
-  const listed = await getListedProperties(page);
-  console.log(`Found ${listed.length} listed propert${listed.length === 1 ? "y" : "ies"}.`);
-
-  for (const property of listed) {
-    console.log(`\nProperty: ${property.address}`);
-    const contacts = await getContacts(page, property);
-    console.log(`  ${contacts.length} enquiry/inspection contact(s).`);
-
-    for (const contact of contacts) {
-      await sleep(config.delayBetweenActionsMs);
-      console.log(`  Searching RP Data: ${contact.name} (${contact.type})`);
-
-      let owned = [];
+    for (const property of listed) {
+      console.log(`\nProperty: ${property.address}`);
+      let contacts = [];
       try {
-        owned = await getOwnedProperties(page, contact.name);
+        contacts = await getContacts(page, property);
       } catch (err) {
-        console.warn(`    RP Data search failed: ${err.message}`);
+        console.warn(`  Could not read contacts: ${err.message}`);
       }
+      console.log(`  ${contacts.length} enquiry/inspection contact(s).`);
 
-      const scOwned = owned.filter(isSunshineCoast);
-      const row = {
-        listedProperty: property.address,
-        contact: contact.name,
-        recordType: contact.type,
-        ownedCount: owned.length,
-        sunshineCoastProperties: scOwned.join(" | "),
-        flagged: scOwned.length > 0 ? "YES" : "",
-      };
-      report.push(row);
+      for (const contact of contacts) {
+        await sleep(config.delayBetweenActionsMs);
+        console.log(`  Searching RP Data: ${contact.name} (${contact.type})`);
 
-      if (scOwned.length) {
-        const note =
-          `[Auto] Owns Sunshine Coast property: ${scOwned.join("; ")}. ` +
-          `Potential seller — flagged ${new Date().toISOString().slice(0, 10)}.`;
-        await writePrivateNote(page, contact, note);
+        let owned = [];
+        try {
+          owned = await getOwnedProperties(page, contact.name);
+        } catch (err) {
+          console.warn(`    RP Data search failed: ${err.message}`);
+        }
+
+        const scOwned = owned.filter(isSunshineCoast);
+        const row = {
+          listedProperty: property.address,
+          contact: contact.name,
+          recordType: contact.type,
+          ownedCount: owned.length,
+          sunshineCoastProperties: scOwned.join(" | "),
+          flagged: scOwned.length > 0 ? "YES" : "",
+          noteStatus: "",
+        };
+        report.push(row);
+
+        if (scOwned.length) {
+          const note =
+            `[Auto] Owns Sunshine Coast property: ${scOwned.join("; ")}. ` +
+            `Potential seller — flagged ${new Date().toISOString().slice(0, 10)}.`;
+          try {
+            await writePrivateNote(page, contact, note);
+            row.noteStatus = config.writeNotes ? "written" : "dry-run";
+          } catch (err) {
+            row.noteStatus = `failed: ${err.message}`;
+            console.warn(`    Note write failed: ${err.message}`);
+          }
+        }
       }
     }
+  } finally {
+    // Always persist whatever was gathered, even if the pipeline threw midway.
+    await writeFile(config.reportCsv, stringify(report, { header: true }), "utf8");
+    await browser.close();
   }
 
-  await browser.close();
-
-  await writeFile(config.reportCsv, stringify(report, { header: true }), "utf8");
   const flagged = report.filter((r) => r.flagged).length;
   console.log(
     `\nDone. ${report.length} contact(s) checked, ${flagged} flagged. ` +
