@@ -1,0 +1,18 @@
+{
+  "name": "lockedon-rpdata-prospector",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Find LockedOn enquiry/inspection contacts who own Sunshine Coast property (via RP Data) and flag them in private notes.",
+  "type": "module",
+  "scripts": {
+    "login": "node login.js",
+    "start": "node run.js",
+    "codegen:lockedon": "playwright codegen https://app.lockedon.com/",
+    "codegen:rpdata": "playwright codegen https://rpp.corelogic.com.au/"
+  },
+  "dependencies": {
+    "csv-stringify": "^6.5.0",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.48.0"
+  }
+}
